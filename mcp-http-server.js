@@ -170,27 +170,46 @@ app.get('/info', (req, res) => {
 });
 
 // Start server
+console.log('Starting server on port:', PORT);
+console.log('Environment check - MCP_SECRET_TOKEN exists:', !!process.env.MCP_SECRET_TOKEN);
+
 const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`MCP HTTP Server running on port ${PORT}`);
-  console.log(`Health check: http://0.0.0.0:${PORT}/health`);
-  console.log(`Tools endpoint: http://0.0.0.0:${PORT}/tools`);
-  console.log(`Tool call endpoint: http://0.0.0.0:${PORT}/tools/call`);
-  console.log(`Server is ready and listening on all interfaces`);
+  console.log(`✅ MCP HTTP Server running on port ${PORT}`);
+  console.log(`✅ Health check: http://0.0.0.0:${PORT}/health`);
+  console.log(`✅ Tools endpoint: http://0.0.0.0:${PORT}/tools`);
+  console.log(`✅ Tool call endpoint: http://0.0.0.0:${PORT}/tools/call`);
+  console.log(`✅ Server is ready and listening on all interfaces`);
+  
+  // Test health endpoint immediately
+  setTimeout(async () => {
+    console.log('🔍 Testing health endpoint...');
+    try {
+      const response = await fetch(`http://localhost:${PORT}/health`);
+      const data = await response.json();
+      console.log(`Health check status: ${response.status}`);
+      console.log('Health check response:', data);
+    } catch (err) {
+      console.error('Health check test failed:', err);
+    }
+  }, 2000);
 });
 
 // Add error handling
 server.on('error', (error) => {
-  console.error('Server error:', error);
+  console.error('❌ Server error:', error);
+  process.exit(1);
 });
 
-// Test health endpoint immediately
-setTimeout(() => {
-  console.log('Testing health endpoint...');
-  fetch(`http://localhost:${PORT}/health`)
-    .then(res => res.json())
-    .then(data => console.log('Health check test result:', data))
-    .catch(err => console.error('Health check test failed:', err));
-}, 1000);
+// Handle process errors
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
 
 // Graceful shutdown
 process.on('SIGINT', () => {
