@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
+import fetch from 'node-fetch';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -100,7 +101,12 @@ async function callMCPServer(request) {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  console.log('Health check requested');
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
 // MCP tools endpoint
@@ -164,12 +170,27 @@ app.get('/info', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`MCP HTTP Server running on port ${PORT}`);
   console.log(`Health check: http://0.0.0.0:${PORT}/health`);
   console.log(`Tools endpoint: http://0.0.0.0:${PORT}/tools`);
   console.log(`Tool call endpoint: http://0.0.0.0:${PORT}/tools/call`);
+  console.log(`Server is ready and listening on all interfaces`);
 });
+
+// Add error handling
+server.on('error', (error) => {
+  console.error('Server error:', error);
+});
+
+// Test health endpoint immediately
+setTimeout(() => {
+  console.log('Testing health endpoint...');
+  fetch(`http://localhost:${PORT}/health`)
+    .then(res => res.json())
+    .then(data => console.log('Health check test result:', data))
+    .catch(err => console.error('Health check test failed:', err));
+}, 1000);
 
 // Graceful shutdown
 process.on('SIGINT', () => {
