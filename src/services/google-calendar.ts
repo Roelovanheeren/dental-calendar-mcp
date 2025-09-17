@@ -23,7 +23,7 @@ export class GoogleCalendarService {
       process.env.GOOGLE_REDIRECT_URI
     );
 
-    // Set credentials if available (you'll need to implement token storage)
+    // Set credentials if available
     if (process.env.GOOGLE_ACCESS_TOKEN && process.env.GOOGLE_REFRESH_TOKEN) {
       this.oauth2Client.setCredentials({
         access_token: process.env.GOOGLE_ACCESS_TOKEN,
@@ -36,6 +36,34 @@ export class GoogleCalendarService {
   }
 
   /**
+   * Ensure credentials are valid, refresh if needed
+   */
+  private async ensureValidCredentials(): Promise<void> {
+    try {
+      // Check if credentials are expired
+      const credentials = this.oauth2Client.credentials;
+      
+      if (!credentials.access_token) {
+        throw new Error('No access token available');
+      }
+
+      // If we have a refresh token, try to refresh
+      if (credentials.refresh_token) {
+        try {
+          await this.oauth2Client.refreshAccessToken();
+          console.log('Access token refreshed successfully');
+        } catch (refreshError) {
+          console.error('Failed to refresh access token:', refreshError);
+          throw new Error('Failed to refresh access token');
+        }
+      }
+    } catch (error) {
+      console.error('Credential validation failed:', error);
+      throw new Error('Google Calendar authentication failed. Please check your OAuth tokens.');
+    }
+  }
+
+  /**
    * Get available time slots for a given date
    */
   async getAvailableSlots(
@@ -44,6 +72,8 @@ export class GoogleCalendarService {
     timeRange?: { start: string; end: string }
   ): Promise<{ start: string; end: string }[]> {
     try {
+      // Ensure credentials are valid before making API calls
+      await this.ensureValidCredentials();
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
 
@@ -83,6 +113,8 @@ export class GoogleCalendarService {
     notes?: string
   ): Promise<AppointmentDetails> {
     try {
+      // Ensure credentials are valid before making API calls
+      await this.ensureValidCredentials();
       const startTime = parseISO(datetime);
       const endTime = addMinutes(startTime, duration);
 
@@ -237,6 +269,8 @@ export class GoogleCalendarService {
    */
   async listAppointments(dateRange: DateRange): Promise<AppointmentDetails[]> {
     try {
+      // Ensure credentials are valid before making API calls
+      await this.ensureValidCredentials();
       const response = await this.calendar.events.list({
         calendarId: this.calendarId,
         timeMin: new Date(dateRange.start).toISOString(),
