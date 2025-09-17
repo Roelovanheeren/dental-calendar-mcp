@@ -321,11 +321,27 @@ app.post('/tools/call', async (req, res) => {
     // Route to the appropriate tool function
     switch (name) {
       case 'check_available_slots':
-        result = await executeCheckAvailability(args, calendarService);
+        // Convert args to match MCP tool format
+        const checkArgs = {
+          date: args.date,
+          duration: args.duration || 30,
+          timeRange: args.timeRange
+        };
+        const checkResult = await executeCheckAvailability(checkArgs, calendarService);
+        result = Array.isArray(checkResult) ? checkResult.map((content: any) => content.text).join('\n') : checkResult;
         break;
         
       case 'book_appointment':
-        result = await executeBookAppointment(args, calendarService);
+        // Convert args to match MCP tool format
+        const bookArgs = {
+          patient: args.patient,
+          datetime: args.datetime,
+          duration: args.duration || 30,
+          appointmentType: args.appointmentType || 'checkup',
+          notes: args.notes
+        };
+        const bookResult = await executeBookAppointment(bookArgs, calendarService);
+        result = Array.isArray(bookResult) ? bookResult.map((content: any) => content.text).join('\n') : bookResult;
         break;
         
       case 'cancel_appointment':
