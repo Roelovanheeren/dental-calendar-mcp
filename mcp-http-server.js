@@ -16,7 +16,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || process.env.MCP_HTTP_PORT || 3001;
+const PORT = process.env.PORT || 3000;
 const SECRET_TOKEN = process.env.MCP_SECRET_TOKEN;
 
 // Validate required environment variables
@@ -102,10 +102,16 @@ async function callMCPServer(request) {
 // Health check endpoint
 app.get('/health', (req, res) => {
   console.log('Health check requested');
-  res.status(200).json({ 
+  res.status(200).send('ok');
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    port: PORT
   });
 });
 
