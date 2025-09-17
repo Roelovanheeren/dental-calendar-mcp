@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["python313", "pip"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[phases.build]
+cmds = ["echo 'No build step needed for Python'"]
+
+[start]
+cmd = "python dental-mcp-http-server.py"
