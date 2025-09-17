@@ -1,3 +1,15 @@
 node_modules/
 dist/
 .env
+
+# Python files (cleanup)
+*.py
+*.pyc
+__pycache__/
+requirements.txt
+runtime.txt
+dental-mcp-production.py
+debug-server.py
+
+# Package backup
+package.json.backup

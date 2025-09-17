@@ -1,14 +1,14 @@
-[providers]
-python = "3.13"
-
 [phases.setup]
-nixPkgs = ["python313", "pip"]
+nixPkgs = ["nodejs_18", "npm-9_x"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = ["npm ci"]
 
 [phases.build]
-cmds = ["echo 'No build step needed for Python'"]
+cmds = ["npm run build"]
 
 [start]
-cmd = "python dental-mcp-http-server.py"
+cmd = "node dist/http-server.js"
+
+[variables]
+NODE_ENV = "production"

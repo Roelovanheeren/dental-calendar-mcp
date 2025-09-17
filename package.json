@@ -1,0 +1,41 @@
+{
+  "name": "dental-calendar-mcp",
+  "version": "1.0.0",
+  "description": "Dental Calendar MCP Server with Google Calendar integration",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/http-server.js",
+    "dev": "tsx watch src/index.ts",
+    "dev:http": "tsx watch src/http-server.ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/dotenv": "^6.1.1",
+    "cors": "^2.8.5",
+    "date-fns": "^2.30.0",
+    "dotenv": "^17.2.2",
+    "express": "^4.21.2",
+    "google-auth-library": "^9.0.0",
+    "googleapis": "^140.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.23",
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "dental",
+    "calendar",
+    "google-calendar",
+    "appointments"
+  ],
+  "author": "Dental Practice",
+  "license": "MIT"
+}
