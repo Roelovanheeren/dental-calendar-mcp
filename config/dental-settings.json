@@ -1,0 +1,122 @@
+{
+  "clinicName": "Tandarts Praktijk Van Heeren",
+  "timezone": "Europe/Amsterdam",
+  "businessHours": {
+    "monday": {
+      "start": "09:00",
+      "end": "17:00",
+      "breakStart": "12:00",
+      "breakEnd": "13:00"
+    },
+    "tuesday": {
+      "start": "09:00",
+      "end": "17:00",
+      "breakStart": "12:00",
+      "breakEnd": "13:00"
+    },
+    "wednesday": {
+      "start": "09:00",
+      "end": "17:00",
+      "breakStart": "12:00",
+      "breakEnd": "13:00"
+    },
+    "thursday": {
+      "start": "09:00",
+      "end": "17:00",
+      "breakStart": "12:00",
+      "breakEnd": "13:00"
+    },
+    "friday": {
+      "start": "09:00",
+      "end": "16:00",
+      "breakStart": "12:00",
+      "breakEnd": "13:00"
+    },
+    "saturday": {
+      "start": "09:00",
+      "end": "14:00"
+    }
+  },
+  "appointmentTypes": {
+    "cleaning": {
+      "duration": 45,
+      "bufferTime": 15,
+      "description": "Regular dental cleaning and polishing"
+    },
+    "checkup": {
+      "duration": 30,
+      "bufferTime": 10,
+      "description": "Routine dental examination"
+    },
+    "consultation": {
+      "duration": 45,
+      "bufferTime": 15,
+      "description": "Initial consultation for new patients"
+    },
+    "filling": {
+      "duration": 60,
+      "bufferTime": 15,
+      "description": "Dental filling procedure"
+    },
+    "root_canal": {
+      "duration": 120,
+      "bufferTime": 30,
+      "description": "Root canal treatment"
+    },
+    "crown": {
+      "duration": 90,
+      "bufferTime": 20,
+      "description": "Crown preparation and fitting"
+    },
+    "extraction": {
+      "duration": 45,
+      "bufferTime": 20,
+      "description": "Tooth extraction"
+    },
+    "emergency": {
+      "duration": 30,
+      "bufferTime": 0,
+      "description": "Emergency dental care"
+    }
+  },
+  "policies": {
+    "minimumAdvanceBooking": 2,
+    "maximumAdvanceBooking": 90,
+    "cancellationPolicy": "24 hours notice required",
+    "noShowPolicy": "Fee may apply for no-shows",
+    "emergencySlots": 2
+  },
+  "holidays": [
+    "2024-01-01",
+    "2024-07-04",
+    "2024-11-28",
+    "2024-12-25",
+    "2025-01-01",
+    "2025-07-04",
+    "2025-11-27",
+    "2025-12-25"
+  ],
+  "reminders": {
+    "email": {
+      "enabled": true,
+      "times": [1440, 60]
+    },
+    "sms": {
+      "enabled": false,
+      "times": [1440, 60]
+    }
+  },
+  "elevenlabsIntegration": {
+    "voiceSettings": {
+      "confirmationPhrase": "Perfect! Uw afspraak is bevestigd",
+      "cancellationPhrase": "Uw afspraak is geannuleerd",
+      "reschedulePhrase": "Uw afspraak is verzet",
+      "unavailablePhrase": "Sorry, dat tijdstip is niet beschikbaar"
+    },
+    "responseFormats": {
+      "booking": "compact",
+      "availability": "detailed",
+      "errors": "helpful"
+    }
+  }
+}
