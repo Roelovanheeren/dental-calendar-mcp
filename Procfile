@@ -1,1 +1,1 @@
-web: node mcp-http-server.js
+web: python dental-mcp-http-server.py
