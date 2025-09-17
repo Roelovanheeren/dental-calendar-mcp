@@ -166,14 +166,81 @@ async def mcp_debug(request: Request):
                 "result": {
                     "tools": [
                         {
-                            "name": "test_tool",
-                            "description": "A simple test tool",
+                            "name": "check_availability",
+                            "description": "Check available appointment slots for a specific date and time range.",
                             "inputSchema": {
                                 "type": "object",
                                 "properties": {
-                                    "message": {"type": "string", "title": "Message"}
+                                    "date": {"type": "string", "title": "Date"},
+                                    "start_time": {"type": "string", "title": "Start Time", "default": None},
+                                    "end_time": {"type": "string", "title": "End Time", "default": None},
+                                    "appointment_type": {"type": "string", "title": "Appointment Type", "default": "checkup"}
                                 },
-                                "required": ["message"]
+                                "required": ["date"]
+                            }
+                        },
+                        {
+                            "name": "book_appointment",
+                            "description": "Book a new dental appointment.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "patient_name": {"type": "string", "title": "Patient Name"},
+                                    "patient_email": {"type": "string", "title": "Patient Email"},
+                                    "date": {"type": "string", "title": "Date"},
+                                    "start_time": {"type": "string", "title": "Start Time"},
+                                    "appointment_type": {"type": "string", "title": "Appointment Type", "default": "checkup"},
+                                    "notes": {"type": "string", "title": "Notes", "default": None}
+                                },
+                                "required": ["patient_name", "patient_email", "date", "start_time"]
+                            }
+                        },
+                        {
+                            "name": "list_appointments",
+                            "description": "List upcoming appointments for a date range.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "start_date": {"type": "string", "title": "Start Date"},
+                                    "end_date": {"type": "string", "title": "End Date", "default": None}
+                                },
+                                "required": ["start_date"]
+                            }
+                        },
+                        {
+                            "name": "get_appointment",
+                            "description": "Get details of a specific appointment.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "appointment_id": {"type": "string", "title": "Appointment ID"}
+                                },
+                                "required": ["appointment_id"]
+                            }
+                        },
+                        {
+                            "name": "reschedule_appointment",
+                            "description": "Reschedule an existing appointment to a new time.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "appointment_id": {"type": "string", "title": "Appointment ID"},
+                                    "new_date": {"type": "string", "title": "New Date"},
+                                    "new_start_time": {"type": "string", "title": "New Start Time"}
+                                },
+                                "required": ["appointment_id", "new_date", "new_start_time"]
+                            }
+                        },
+                        {
+                            "name": "cancel_appointment",
+                            "description": "Cancel an existing appointment.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "appointment_id": {"type": "string", "title": "Appointment ID"},
+                                    "reason": {"type": "string", "title": "Reason", "default": None}
+                                },
+                                "required": ["appointment_id"]
                             }
                         }
                     ]
@@ -181,6 +248,9 @@ async def mcp_debug(request: Request):
             }
             print(f"[DEBUG] Sending tools list response: {json.dumps(response, indent=2)}")
             return response
+        
+        elif method == "tools/call":
+            return await handle_tool_call(body)
         
         else:
             response = {
@@ -224,6 +294,275 @@ async def catch_all(request: Request, path: str):
         "timestamp": datetime.now().isoformat(),
         "headers": dict(request.headers)
     }
+
+async def handle_tool_call(body):
+    """Handle tool call requests."""
+    params = body.get("params", {})
+    tool_name = params.get("name")
+    arguments = params.get("arguments", {})
+    
+    print(f"[DEBUG] Tool call: {tool_name} with args: {json.dumps(arguments, indent=2)}")
+    
+    try:
+        if tool_name == "check_availability":
+            result = await check_availability(
+                arguments.get("date"),
+                arguments.get("start_time"),
+                arguments.get("end_time"),
+                arguments.get("appointment_type", "checkup")
+            )
+        elif tool_name == "book_appointment":
+            result = await book_appointment(
+                arguments.get("patient_name"),
+                arguments.get("patient_email"),
+                arguments.get("date"),
+                arguments.get("start_time"),
+                arguments.get("appointment_type", "checkup"),
+                arguments.get("notes")
+            )
+        elif tool_name == "list_appointments":
+            result = await list_appointments(
+                arguments.get("start_date"),
+                arguments.get("end_date")
+            )
+        elif tool_name == "get_appointment":
+            result = await get_appointment(arguments.get("appointment_id"))
+        elif tool_name == "reschedule_appointment":
+            result = await reschedule_appointment(
+                arguments.get("appointment_id"),
+                arguments.get("new_date"),
+                arguments.get("new_start_time")
+            )
+        elif tool_name == "cancel_appointment":
+            result = await cancel_appointment(
+                arguments.get("appointment_id"),
+                arguments.get("reason")
+            )
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "id": body.get("id"),
+                "error": {
+                    "code": -32601,
+                    "message": f"Tool not found: {tool_name}"
+                }
+            }
+        
+        response = {
+            "jsonrpc": "2.0",
+            "id": body.get("id"),
+            "result": {
+                "content": [
+                    {"type": "text", "text": result}
+                ]
+            }
+        }
+        print(f"[DEBUG] Tool response: {json.dumps(response, indent=2)}")
+        return response
+    
+    except Exception as e:
+        print(f"[DEBUG] Tool execution error: {e}")
+        return {
+            "jsonrpc": "2.0",
+            "id": body.get("id"),
+            "error": {
+                "code": -32603,
+                "message": f"Tool execution error: {str(e)}"
+            }
+        }
+
+# Dental appointment functions
+appointments = {}
+
+async def check_availability(date: str, start_time: str = None, end_time: str = None, appointment_type: str = "checkup") -> str:
+    """Check available appointment slots for a specific date and time range."""
+    try:
+        from datetime import datetime, timedelta
+        
+        # Parse date
+        target_date = datetime.strptime(date, "%Y-%m-%d")
+        day_name = target_date.strftime("%A").lower()
+        
+        # Simple business hours (9 AM to 5 PM, Monday to Friday)
+        if day_name in ['saturday', 'sunday']:
+            return f"Clinic is closed on {day_name}"
+        
+        # Generate available slots (every 30 minutes from 9 AM to 5 PM)
+        available_slots = []
+        for hour in range(9, 17):
+            for minute in [0, 30]:
+                slot_time = f"{hour:02d}:{minute:02d}"
+                slot_key = f"{date} {slot_time}"
+                if slot_key not in appointments:
+                    available_slots.append(slot_time)
+        
+        if available_slots:
+            result = f"Available slots on {date} for {appointment_type}:\n"
+            result += "\n".join([f"- {slot}" for slot in available_slots[:10]])
+            if len(available_slots) > 10:
+                result += f"\n... and {len(available_slots) - 10} more slots"
+        else:
+            result = f"No available slots on {date} for {appointment_type}"
+        
+        return result
+        
+    except ValueError as e:
+        return f"Invalid date format: {e}"
+    except Exception as e:
+        return f"Error checking availability: {e}"
+
+async def book_appointment(patient_name: str, patient_email: str, date: str, start_time: str, appointment_type: str = "checkup", notes: str = None) -> str:
+    """Book a new dental appointment."""
+    try:
+        slot_key = f"{date} {start_time}"
+        
+        if slot_key in appointments:
+            return f"Sorry, the slot {date} at {start_time} is already booked."
+        
+        appointment_id = f"APT_{len(appointments) + 1:04d}"
+        appointments[slot_key] = {
+            "id": appointment_id,
+            "patient_name": patient_name,
+            "patient_email": patient_email,
+            "date": date,
+            "start_time": start_time,
+            "appointment_type": appointment_type,
+            "notes": notes or "",
+            "status": "confirmed"
+        }
+        
+        result = f"✅ Appointment booked successfully!\n\n"
+        result += f"Appointment ID: {appointment_id}\n"
+        result += f"Patient: {patient_name}\n"
+        result += f"Email: {patient_email}\n"
+        result += f"Date: {date}\n"
+        result += f"Time: {start_time}\n"
+        result += f"Type: {appointment_type}\n"
+        if notes:
+            result += f"Notes: {notes}\n"
+        
+        return result
+        
+    except Exception as e:
+        return f"Error booking appointment: {e}"
+
+async def list_appointments(start_date: str, end_date: str = None) -> str:
+    """List upcoming appointments for a date range."""
+    try:
+        from datetime import datetime, timedelta
+        
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+        end = datetime.strptime(end_date, "%Y-%m-%d") if end_date else start + timedelta(days=7)
+        
+        matching_appointments = []
+        for slot_key, appointment in appointments.items():
+            appointment_date = datetime.strptime(appointment["date"], "%Y-%m-%d")
+            if start <= appointment_date <= end:
+                matching_appointments.append(appointment)
+        
+        if not matching_appointments:
+            return f"No appointments found between {start_date} and {end_date or start_date}"
+        
+        result = f"Appointments between {start_date} and {end_date or start_date}:\n\n"
+        for apt in sorted(matching_appointments, key=lambda x: f"{x['date']} {x['start_time']}"):
+            result += f"• {apt['id']}: {apt['patient_name']} - {apt['date']} at {apt['start_time']} ({apt['appointment_type']})\n"
+        
+        return result
+        
+    except Exception as e:
+        return f"Error listing appointments: {e}"
+
+async def get_appointment(appointment_id: str) -> str:
+    """Get details of a specific appointment."""
+    try:
+        for appointment in appointments.values():
+            if appointment["id"] == appointment_id:
+                result = f"Appointment Details:\n\n"
+                result += f"ID: {appointment['id']}\n"
+                result += f"Patient: {appointment['patient_name']}\n"
+                result += f"Email: {appointment['patient_email']}\n"
+                result += f"Date: {appointment['date']}\n"
+                result += f"Time: {appointment['start_time']}\n"
+                result += f"Type: {appointment['appointment_type']}\n"
+                result += f"Status: {appointment['status']}\n"
+                if appointment['notes']:
+                    result += f"Notes: {appointment['notes']}\n"
+                return result
+        
+        return f"Appointment {appointment_id} not found"
+        
+    except Exception as e:
+        return f"Error retrieving appointment: {e}"
+
+async def reschedule_appointment(appointment_id: str, new_date: str, new_start_time: str) -> str:
+    """Reschedule an existing appointment to a new time."""
+    try:
+        # Find the appointment
+        old_slot_key = None
+        appointment = None
+        for slot_key, apt in appointments.items():
+            if apt["id"] == appointment_id:
+                old_slot_key = slot_key
+                appointment = apt
+                break
+        
+        if not appointment:
+            return f"Appointment {appointment_id} not found"
+        
+        # Check if new slot is available
+        new_slot_key = f"{new_date} {new_start_time}"
+        if new_slot_key in appointments:
+            return f"Sorry, the slot {new_date} at {new_start_time} is already booked."
+        
+        # Update appointment
+        appointment["date"] = new_date
+        appointment["start_time"] = new_start_time
+        
+        # Move to new slot
+        appointments[new_slot_key] = appointment
+        del appointments[old_slot_key]
+        
+        result = f"✅ Appointment rescheduled successfully!\n\n"
+        result += f"Appointment ID: {appointment_id}\n"
+        result += f"New Date: {new_date}\n"
+        result += f"New Time: {new_start_time}\n"
+        result += f"Patient: {appointment['patient_name']}\n"
+        
+        return result
+        
+    except Exception as e:
+        return f"Error rescheduling appointment: {e}"
+
+async def cancel_appointment(appointment_id: str, reason: str = None) -> str:
+    """Cancel an existing appointment."""
+    try:
+        # Find and remove the appointment
+        slot_key_to_remove = None
+        appointment = None
+        for slot_key, apt in appointments.items():
+            if apt["id"] == appointment_id:
+                slot_key_to_remove = slot_key
+                appointment = apt
+                break
+        
+        if not appointment:
+            return f"Appointment {appointment_id} not found"
+        
+        # Remove appointment
+        del appointments[slot_key_to_remove]
+        
+        result = f"✅ Appointment cancelled successfully!\n\n"
+        result += f"Appointment ID: {appointment_id}\n"
+        result += f"Patient: {appointment['patient_name']}\n"
+        result += f"Date: {appointment['date']}\n"
+        result += f"Time: {appointment['start_time']}\n"
+        if reason:
+            result += f"Reason: {reason}\n"
+        
+        return result
+        
+    except Exception as e:
+        return f"Error cancelling appointment: {e}"
 
 if __name__ == "__main__":
     import asyncio
