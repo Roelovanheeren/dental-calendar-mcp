@@ -198,10 +198,74 @@ app.post('/mcp', async (req, res) => {
     const method = body.method;
     
     if (method === "tools/call") {
-      // Forward to tools/call handler
-      req.url = '/tools/call';
-      req.method = 'POST';
-      return app._router.handle(req, res);
+      // Handle tools/call directly
+      const params = body.params || {};
+      const toolName = params.name;
+      const toolArguments = params.arguments || {};
+      
+      console.log(`MCP Tool call: ${toolName}`, toolArguments);
+      
+      try {
+        let result;
+        
+        // Route to the appropriate tool function
+        switch (toolName) {
+          case 'check_available_slots':
+            // Convert args to match MCP tool format
+            const checkArgs = {
+              date: toolArguments.date,
+              duration: toolArguments.duration || 30,
+              timeRange: toolArguments.timeRange
+            };
+            const checkResult = await executeCheckAvailability(checkArgs, calendarService);
+            result = Array.isArray(checkResult) ? checkResult.map((content: any) => content.text).join('\n') : checkResult;
+            break;
+            
+          case 'book_appointment':
+            // Convert args to match MCP tool format
+            const bookArgs = {
+              patient: toolArguments.patient,
+              datetime: toolArguments.datetime,
+              duration: toolArguments.duration || 30,
+              appointmentType: toolArguments.appointmentType || 'checkup',
+              notes: toolArguments.notes
+            };
+            const bookResult = await executeBookAppointment(bookArgs, calendarService);
+            result = Array.isArray(bookResult) ? bookResult.map((content: any) => content.text).join('\n') : bookResult;
+            break;
+            
+          default:
+            throw new Error(`Unknown tool: ${toolName}`);
+        }
+        
+        // Return MCP-formatted response
+        return res.json({
+          "jsonrpc": "2.0",
+          "id": body.id,
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": result
+              }
+            ]
+          }
+        });
+        
+      } catch (error) {
+        console.error('MCP Tool execution error:', error);
+        
+        const errorMessage = error instanceof Error ? error.message : 'Internal server error';
+        
+        return res.json({
+          "jsonrpc": "2.0",
+          "id": body.id,
+          "error": {
+            "code": -32000,
+            "message": errorMessage
+          }
+        });
+      }
     }
     
     // Handle other MCP methods
