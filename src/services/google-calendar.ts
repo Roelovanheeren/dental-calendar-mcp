@@ -74,11 +74,16 @@ export class GoogleCalendarService {
     try {
       // Ensure credentials are valid before making API calls
       await this.ensureValidCredentials();
+      
+      console.log(`Getting available slots for date: ${date}, duration: ${duration}`);
+      
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
 
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
+
+      console.log(`Searching from ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`);
 
       const response = await this.calendar.events.list({
         calendarId: this.calendarId,
@@ -89,6 +94,8 @@ export class GoogleCalendarService {
       });
 
       const events = response.data.items || [];
+      console.log(`Found ${events.length} events for the day`);
+      
       const availableSlots = this.calculateAvailableSlots(
         date,
         events,
@@ -96,8 +103,10 @@ export class GoogleCalendarService {
         timeRange
       );
 
+      console.log(`Calculated ${availableSlots.length} available slots`);
       return availableSlots;
     } catch (error) {
+      console.error('Error in getAvailableSlots:', error);
       throw this.handleError('Failed to get available slots', error);
     }
   }
@@ -123,11 +132,11 @@ export class GoogleCalendarService {
         description: this.buildEventDescription(patient, appointmentType, notes),
         start: {
           dateTime: formatISO(startTime),
-          timeZone: process.env.CLINIC_TIMEZONE || 'America/New_York',
+          timeZone: 'Europe/Amsterdam',
         },
         end: {
           dateTime: formatISO(endTime),
-          timeZone: process.env.CLINIC_TIMEZONE || 'America/New_York',
+          timeZone: 'Europe/Amsterdam',
         },
         attendees: [
           {
@@ -219,11 +228,11 @@ export class GoogleCalendarService {
         ...existingEvent.data,
         start: {
           dateTime: formatISO(newStartTime),
-          timeZone: process.env.CLINIC_TIMEZONE || 'America/New_York',
+          timeZone: 'Europe/Amsterdam',
         },
         end: {
           dateTime: formatISO(newEndTime),
-          timeZone: process.env.CLINIC_TIMEZONE || 'America/New_York',
+          timeZone: 'Europe/Amsterdam',
         },
       };
 
@@ -317,18 +326,18 @@ export class GoogleCalendarService {
     duration: number,
     timeRange?: { start: string; end: string }
   ): { start: string; end: string }[] {
-    const dateObj = new Date(date);
     const businessStart = timeRange?.start || process.env.BUSINESS_HOURS_START || '09:00';
     const businessEnd = timeRange?.end || process.env.BUSINESS_HOURS_END || '17:00';
+    
+    // Always use Amsterdam timezone for Dutch dental clinic
+    const timezone = 'Europe/Amsterdam';
 
     const [startHour, startMinute] = businessStart.split(':').map(Number);
     const [endHour, endMinute] = businessEnd.split(':').map(Number);
 
-    const dayStart = new Date(dateObj);
-    dayStart.setHours(startHour, startMinute, 0, 0);
-
-    const dayEnd = new Date(dateObj);
-    dayEnd.setHours(endHour, endMinute, 0, 0);
+    // Create dates in Amsterdam timezone
+    const dayStart = new Date(`${date}T${businessStart}:00+02:00`); // Amsterdam is UTC+2 in summer
+    const dayEnd = new Date(`${date}T${businessEnd}:00+02:00`);
 
     // Create busy periods from existing events
     const busyPeriods = events
