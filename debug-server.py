@@ -103,12 +103,37 @@ async def sse_debug():
         }
     )
 
+@app.get("/mcp")
 @app.post("/mcp")
 async def mcp_debug(request: Request):
     """MCP endpoint with debug logging."""
+    print(f"[DEBUG] {request.method} request to /mcp")
+    print(f"[DEBUG] Headers: {dict(request.headers)}")
+    
+    # Handle GET requests (ElevenLabs initial connection)
+    if request.method == "GET":
+        print(f"[DEBUG] ElevenLabs GET request - returning MCP server info")
+        return {
+            "jsonrpc": "2.0",
+            "result": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {
+                    "experimental": {},
+                    "prompts": {"listChanged": False},
+                    "resources": {"subscribe": False, "listChanged": False},
+                    "tools": {"listChanged": False}
+                },
+                "serverInfo": {
+                    "name": "DebugMCP",
+                    "version": "1.0.0"
+                }
+            }
+        }
+    
+    # Handle POST requests (MCP protocol)
     try:
         body = await request.json()
-        print(f"[DEBUG] MCP request received: {json.dumps(body, indent=2)}")
+        print(f"[DEBUG] MCP POST request received: {json.dumps(body, indent=2)}")
         
         method = body.get("method")
         print(f"[DEBUG] Method: {method}")
