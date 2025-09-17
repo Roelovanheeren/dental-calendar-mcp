@@ -12,6 +12,14 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 import uvicorn
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request as GoogleRequest
+from googleapiclient.discovery import build
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Amsterdam timezone
 AMSTERDAM_TZ = timezone(timedelta(hours=1))  # UTC+1 (winter time)
@@ -25,6 +33,81 @@ def get_amsterdam_time():
         return now_utc.astimezone(AMSTERDAM_TZ_SUMMER)
     else:
         return now_utc.astimezone(AMSTERDAM_TZ)
+
+# Google Calendar service
+class GoogleCalendarService:
+    def __init__(self):
+        self.service = None
+        self.calendar_id = os.getenv('GOOGLE_CALENDAR_ID', 'primary')
+        self._initialize_service()
+    
+    def _initialize_service(self):
+        """Initialize Google Calendar service with OAuth credentials"""
+        try:
+            access_token = os.getenv('GOOGLE_ACCESS_TOKEN')
+            refresh_token = os.getenv('GOOGLE_REFRESH_TOKEN')
+            client_id = os.getenv('GOOGLE_CLIENT_ID')
+            client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
+            
+            if not all([access_token, refresh_token, client_id, client_secret]):
+                logger.warning("Google Calendar credentials not found. Using mock mode.")
+                return
+            
+            creds = Credentials(
+                token=access_token,
+                refresh_token=refresh_token,
+                token_uri='https://oauth2.googleapis.com/token',
+                client_id=client_id,
+                client_secret=client_secret
+            )
+            
+            # Refresh token if needed
+            if creds.expired:
+                creds.refresh(GoogleRequest())
+            
+            self.service = build('calendar', 'v3', credentials=creds)
+            logger.info("Google Calendar service initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize Google Calendar service: {e}")
+            self.service = None
+    
+    def get_events(self, start_date, end_date):
+        """Get events from Google Calendar"""
+        if not self.service:
+            return []
+        
+        try:
+            events_result = self.service.events().list(
+                calendarId=self.calendar_id,
+                timeMin=start_date.isoformat() + 'Z',
+                timeMax=end_date.isoformat() + 'Z',
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+            
+            return events_result.get('items', [])
+        except Exception as e:
+            logger.error(f"Error fetching events: {e}")
+            return []
+    
+    def create_event(self, event_data):
+        """Create event in Google Calendar"""
+        if not self.service:
+            return None
+        
+        try:
+            event = self.service.events().insert(
+                calendarId=self.calendar_id,
+                body=event_data
+            ).execute()
+            return event
+        except Exception as e:
+            logger.error(f"Error creating event: {e}")
+            return None
+
+# Initialize Google Calendar service
+calendar_service = GoogleCalendarService()
 
 # Initialize FastAPI app
 app = FastAPI(title="Debug MCP Server", version="1.0.0")
@@ -405,16 +488,60 @@ async def check_availability(date: str, start_time: str = None, end_time: str = 
         # Business hours: Monday-Friday 9:00-17:00, Friday until 16:00
         end_hour = 16 if day_name == 'friday' else 17
         
+        # Get events from Google Calendar for the day
+        start_of_day = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_day = target_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        events = calendar_service.get_events(start_of_day, end_of_day)
+        
+        # Create busy periods from existing events
+        busy_periods = []
+        for event in events:
+            if event.get('start', {}).get('dateTime'):
+                start_time_str = event['start']['dateTime']
+                end_time_str = event['end']['dateTime']
+                
+                # Parse times and convert to Amsterdam timezone
+                start_dt = datetime.fromisoformat(start_time_str.replace('Z', '+00:00'))
+                end_dt = datetime.fromisoformat(end_time_str.replace('Z', '+00:00'))
+                
+                # Convert to Amsterdam time
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=timezone.utc)
+                if end_dt.tzinfo is None:
+                    end_dt = end_dt.replace(tzinfo=timezone.utc)
+                
+                start_amsterdam = start_dt.astimezone(AMSTERDAM_TZ)
+                end_amsterdam = end_dt.astimezone(AMSTERDAM_TZ)
+                
+                # Only include events that are on the target date
+                if start_amsterdam.date() == target_date.date():
+                    busy_periods.append((start_amsterdam, end_amsterdam))
+        
+        # Sort busy periods by start time
+        busy_periods.sort(key=lambda x: x[0])
+        
         # Generate available slots (every 30 minutes from 9 AM to end time)
         available_slots = []
-        for hour in range(9, end_hour + 1):
-            for minute in [0, 30]:
-                if hour == end_hour and minute > 0:
-                    break  # Don't go past end time
-                slot_time = f"{hour:02d}:{minute:02d}"
-                slot_key = f"{date} {slot_time}"
-                if slot_key not in appointments:
-                    available_slots.append(slot_time)
+        current_time = target_date.replace(hour=9, minute=0, second=0, microsecond=0)
+        end_time = target_date.replace(hour=end_hour, minute=0, second=0, microsecond=0)
+        
+        while current_time < end_time:
+            slot_end = current_time + timedelta(minutes=30)
+            
+            # Check if this slot conflicts with any busy period
+            is_available = True
+            for busy_start, busy_end in busy_periods:
+                if (current_time < busy_end and slot_end > busy_start):
+                    is_available = False
+                    break
+            
+            if is_available:
+                slot_time = current_time.strftime("%H:%M")
+                available_slots.append(slot_time)
+            
+            # Move to next slot
+            current_time += timedelta(minutes=30)
         
         if available_slots:
             result = f"Available slots on {date} for {appointment_type} (Amsterdam time):\n"
@@ -434,34 +561,61 @@ async def check_availability(date: str, start_time: str = None, end_time: str = 
 async def book_appointment(patient_name: str, patient_email: str, date: str, start_time: str, appointment_type: str = "checkup", notes: str = None) -> str:
     """Book a new dental appointment."""
     try:
-        slot_key = f"{date} {start_time}"
+        # Parse date and time
+        appointment_datetime = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
         
-        if slot_key in appointments:
-            return f"Sorry, the slot {date} at {start_time} is already booked."
+        # Convert to Amsterdam timezone
+        appointment_datetime = appointment_datetime.replace(tzinfo=AMSTERDAM_TZ)
         
-        appointment_id = f"APT_{len(appointments) + 1:04d}"
-        appointments[slot_key] = {
-            "id": appointment_id,
-            "patient_name": patient_name,
-            "patient_email": patient_email,
-            "date": date,
-            "start_time": start_time,
-            "appointment_type": appointment_type,
-            "notes": notes or "",
-            "status": "confirmed"
+        # Check if slot is available first
+        availability_result = await check_availability(date, start_time, None, appointment_type)
+        if "No available slots" in availability_result or start_time not in availability_result:
+            return f"Sorry, the slot {date} at {start_time} is not available."
+        
+        # Create Google Calendar event
+        event_data = {
+            'summary': f"{appointment_type.title()} - {patient_name}",
+            'description': f"Patient: {patient_name}\nEmail: {patient_email}\nType: {appointment_type}\nNotes: {notes or 'None'}",
+            'start': {
+                'dateTime': appointment_datetime.isoformat(),
+                'timeZone': 'Europe/Amsterdam',
+            },
+            'end': {
+                'dateTime': (appointment_datetime + timedelta(minutes=30)).isoformat(),
+                'timeZone': 'Europe/Amsterdam',
+            },
+            'attendees': [
+                {'email': patient_email, 'displayName': patient_name}
+            ],
+            'reminders': {
+                'useDefault': False,
+                'overrides': [
+                    {'method': 'email', 'minutes': 24 * 60},  # 24 hours
+                    {'method': 'popup', 'minutes': 60},       # 1 hour
+                ],
+            },
         }
         
-        result = f"✅ Appointment booked successfully!\n\n"
-        result += f"Appointment ID: {appointment_id}\n"
-        result += f"Patient: {patient_name}\n"
-        result += f"Email: {patient_email}\n"
-        result += f"Date: {date}\n"
-        result += f"Time: {start_time}\n"
-        result += f"Type: {appointment_type}\n"
-        if notes:
-            result += f"Notes: {notes}\n"
+        # Create the event in Google Calendar
+        created_event = calendar_service.create_event(event_data)
         
-        return result
+        if created_event:
+            appointment_id = created_event.get('id', 'unknown')
+            
+            result = f"✅ Appointment booked successfully!\n\n"
+            result += f"Appointment ID: {appointment_id}\n"
+            result += f"Patient: {patient_name}\n"
+            result += f"Email: {patient_email}\n"
+            result += f"Date: {date}\n"
+            result += f"Time: {start_time}\n"
+            result += f"Type: {appointment_type}\n"
+            if notes:
+                result += f"Notes: {notes}\n"
+            result += f"\n📅 Event created in Google Calendar"
+            
+            return result
+        else:
+            return f"Error: Failed to create appointment in Google Calendar. Please try again."
         
     except Exception as e:
         return f"Error booking appointment: {e}"
