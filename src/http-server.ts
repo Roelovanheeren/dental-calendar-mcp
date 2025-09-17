@@ -191,6 +191,124 @@ app.get('/tools', (req, res) => {
   });
 });
 
+// MCP endpoint - ElevenLabs expects this
+app.post('/mcp', async (req, res) => {
+  try {
+    const body = req.body;
+    const method = body.method;
+    
+    if (method === "tools/call") {
+      // Forward to tools/call handler
+      req.url = '/tools/call';
+      req.method = 'POST';
+      return app._router.handle(req, res);
+    }
+    
+    // Handle other MCP methods
+    if (method === "initialize") {
+      return res.json({
+        "jsonrpc": "2.0",
+        "id": body.id,
+        "result": {
+          "protocolVersion": "2024-11-05",
+          "capabilities": {
+            "experimental": {},
+            "prompts": {"listChanged": false},
+            "resources": {"subscribe": false, "listChanged": false},
+            "tools": {"listChanged": false}
+          },
+          "serverInfo": {
+            "name": "DentalCalendarMCP",
+            "version": "1.0.0"
+          }
+        }
+      });
+    }
+    
+    if (method === "tools/list") {
+      return res.json({
+        "jsonrpc": "2.0",
+        "id": body.id,
+        "result": {
+          "tools": [
+            {
+              "name": "check_available_slots",
+              "description": "Check available appointment time slots for a specific date",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "date": {"type": "string", "description": "Date to check availability for (YYYY-MM-DD format or natural language)"},
+                  "duration": {"type": "number", "description": "Appointment duration in minutes", "default": 30},
+                  "timeRange": {
+                    "type": "object",
+                    "description": "Time range to search within",
+                    "properties": {
+                      "start": {"type": "string", "description": "Start time (HH:MM format)"},
+                      "end": {"type": "string", "description": "End time (HH:MM format)"}
+                    }
+                  }
+                },
+                "required": ["date"]
+              }
+            },
+            {
+              "name": "book_appointment",
+              "description": "Book a new dental appointment",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "patient": {
+                    "type": "object",
+                    "properties": {
+                      "name": {"type": "string", "description": "Patient full name"},
+                      "phone": {"type": "string", "description": "Patient phone number"},
+                      "email": {"type": "string", "description": "Patient email address"}
+                    },
+                    "required": ["name", "phone", "email"]
+                  },
+                  "datetime": {"type": "string", "description": "Appointment date and time (ISO format or natural language)"},
+                  "duration": {"type": "number", "description": "Appointment duration in minutes", "default": 30},
+                  "appointmentType": {"type": "string", "description": "Type of appointment", "enum": ["checkup", "cleaning", "consultation", "treatment", "emergency"], "default": "checkup"},
+                  "notes": {"type": "string", "description": "Additional notes or special requests"}
+                },
+                "required": ["patient", "datetime"]
+              }
+            }
+          ]
+        }
+      });
+    }
+    
+    return res.status(404).json({error: "Method not found"});
+    
+  } catch (error) {
+    console.error('MCP endpoint error:', error);
+    return res.status(500).json({error: "Internal server error"});
+  }
+});
+
+// SSE endpoint - ElevenLabs expects this
+app.get('/sse', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+  
+  res.write('data: {"type": "connected"}\n\n');
+  
+  // Keep connection alive
+  const interval = setInterval(() => {
+    res.write('data: {"type": "ping"}\n\n');
+  }, 30000);
+  
+  req.on('close', () => {
+    clearInterval(interval);
+  });
+});
+
 // MCP tool call endpoint - This is where ElevenLabs will call tools
 app.post('/tools/call', async (req, res) => {
   try {
