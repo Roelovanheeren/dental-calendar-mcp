@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "node mcp-http-server.js",
     "dev": "tsc --watch",
     "test": "npm run build && node dist/test.js",
     "web": "node mcp-http-server.js"
@@ -26,6 +26,7 @@
     "date-fns": "^3.6.0",
     "dotenv": "^16.4.5",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
     "googleapis": "^144.0.0",
     "zod": "^3.22.4"
   },

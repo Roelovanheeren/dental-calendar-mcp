@@ -3,6 +3,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -14,12 +15,29 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const PORT = process.env.MCP_HTTP_PORT || 3001;
-const SECRET_TOKEN = process.env.MCP_SECRET_TOKEN || 'dental-mcp-secret-2025';
+const PORT = process.env.PORT || process.env.MCP_HTTP_PORT || 3001;
+const SECRET_TOKEN = process.env.MCP_SECRET_TOKEN;
+
+// Validate required environment variables
+if (!SECRET_TOKEN) {
+  console.error('Error: MCP_SECRET_TOKEN environment variable is required');
+  process.exit(1);
+}
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
+  credentials: true
+}));
+app.use(express.json({ limit: '10mb' }));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: 'Too many requests from this IP, please try again later.'
+});
+app.use(limiter);
 
 // Secret token validation middleware
 const validateSecret = (req, res, next) => {
@@ -146,11 +164,11 @@ app.get('/info', (req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`MCP HTTP Server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Tools endpoint: http://localhost:${PORT}/tools`);
-  console.log(`Tool call endpoint: http://localhost:${PORT}/tools/call`);
+  console.log(`Health check: http://0.0.0.0:${PORT}/health`);
+  console.log(`Tools endpoint: http://0.0.0.0:${PORT}/tools`);
+  console.log(`Tool call endpoint: http://0.0.0.0:${PORT}/tools/call`);
 });
 
 // Graceful shutdown
