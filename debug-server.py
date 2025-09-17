@@ -7,11 +7,24 @@ A simple server that logs all requests to help debug what ElevenLabs is actually
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 import uvicorn
+
+# Amsterdam timezone
+AMSTERDAM_TZ = timezone(timedelta(hours=1))  # UTC+1 (winter time)
+AMSTERDAM_TZ_SUMMER = timezone(timedelta(hours=2))  # UTC+2 (summer time)
+
+def get_amsterdam_time():
+    """Get current time in Amsterdam timezone"""
+    now_utc = datetime.now(timezone.utc)
+    # Simple check: if month is 4-9, assume summer time (UTC+2)
+    if 4 <= now_utc.month <= 9:
+        return now_utc.astimezone(AMSTERDAM_TZ_SUMMER)
+    else:
+        return now_utc.astimezone(AMSTERDAM_TZ)
 
 # Initialize FastAPI app
 app = FastAPI(title="Debug MCP Server", version="1.0.0")
@@ -377,27 +390,34 @@ appointments = {}
 async def check_availability(date: str, start_time: str = None, end_time: str = None, appointment_type: str = "checkup") -> str:
     """Check available appointment slots for a specific date and time range."""
     try:
-        from datetime import datetime, timedelta
-        
-        # Parse date
+        # Parse date in Amsterdam timezone
         target_date = datetime.strptime(date, "%Y-%m-%d")
         day_name = target_date.strftime("%A").lower()
         
-        # Simple business hours (9 AM to 5 PM, Monday to Friday)
+        # Check if it's a weekend (clinic closed)
         if day_name in ['saturday', 'sunday']:
             return f"Clinic is closed on {day_name}"
         
-        # Generate available slots (every 30 minutes from 9 AM to 5 PM)
+        # Check if it's a holiday
+        if date in ["2025-01-01", "2025-07-04", "2025-11-27", "2025-12-25"]:
+            return f"Clinic is closed on {date} (holiday)"
+        
+        # Business hours: Monday-Friday 9:00-17:00, Friday until 16:00
+        end_hour = 16 if day_name == 'friday' else 17
+        
+        # Generate available slots (every 30 minutes from 9 AM to end time)
         available_slots = []
-        for hour in range(9, 17):
+        for hour in range(9, end_hour + 1):
             for minute in [0, 30]:
+                if hour == end_hour and minute > 0:
+                    break  # Don't go past end time
                 slot_time = f"{hour:02d}:{minute:02d}"
                 slot_key = f"{date} {slot_time}"
                 if slot_key not in appointments:
                     available_slots.append(slot_time)
         
         if available_slots:
-            result = f"Available slots on {date} for {appointment_type}:\n"
+            result = f"Available slots on {date} for {appointment_type} (Amsterdam time):\n"
             result += "\n".join([f"- {slot}" for slot in available_slots[:10]])
             if len(available_slots) > 10:
                 result += f"\n... and {len(available_slots) - 10} more slots"
